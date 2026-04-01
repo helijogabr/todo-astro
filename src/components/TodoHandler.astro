@@ -1,0 +1,14 @@
+---
+import { db, eq, Todo } from "astro:db";
+import TodoList from "@components/Todo.tsx";
+
+const user = await Astro.session?.get("userId");
+
+if (!user) {
+  return Astro.redirect("/login");
+}
+
+const todos = await db.select().from(Todo).where(eq(Todo.user, user)).all();
+---
+
+<TodoList todos={todos} client:load />

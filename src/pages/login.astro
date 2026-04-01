@@ -1,0 +1,38 @@
+---
+import { actions } from "astro:actions";
+import Layout from "../layouts/Layout.astro";
+
+const result = Astro.getActionResult(actions.loginForm);
+
+if (result && !result.error) {
+  console.log("Login successful, redirecting to home page...");
+  console.log("User ID:", await Astro.session?.get("userId"));
+  return Astro.redirect("/");
+}
+---
+
+<Layout>
+  <main class="flex min-h-screen flex-col items-center justify-center">
+    <form method="POST" action={actions.loginForm} class="flex flex-col gap-2">
+      <label>
+        Username:
+        <input type="text" name="username" required class="rounded border border-gray-300" />
+      </label>
+      <br />
+      <label>
+        Password:
+        <input type="password" name="password" required class="rounded border border-gray-300" />
+      </label>
+      <br />
+      <button type="submit" class="rounded border border-gray-300 bg-gray-200">Login</button>
+    </form>
+
+    <div>
+      {
+        result && result.error && (
+          <p style={{ color: "red" }}>{result.error.message}</p>
+        )
+      }
+    </div>
+  </main>
+</Layout>
