@@ -3,9 +3,17 @@ import { and, db, eq, not, Todo } from "astro:db";
 import { z } from "astro/zod";
 
 export const getTodos = defineAction({
-  input: z.number(),
-  handler: async (input) => {
-    const todos = await db.select().from(Todo).where(eq(Todo.user, input));
+  handler: async (_, { session }) => {
+    const user = await session?.get("userId");
+
+    if (!user) {
+      throw new ActionError({
+        code: "UNAUTHORIZED",
+        message: "You must be logged in to view todos",
+      });
+    }
+
+    const todos = await db.select().from(Todo).where(eq(Todo.user, user));
     return todos;
   },
 });

@@ -1,6 +1,17 @@
 import { actions } from "astro:actions";
 import { useState } from "react";
 
+async function getTodos() {
+  const res = await actions.getTodos();
+
+  if (res.error) {
+    console.error("Failed to fetch todos:", res.error);
+    return [];
+  }
+
+  return res.data;
+}
+
 export default function Todo({
   todos,
 }: {
@@ -19,6 +30,7 @@ export default function Todo({
 
     if (res.error) {
       console.error("Failed to add todo:", res.error);
+      setTodoList(await getTodos());
       return;
     }
 
@@ -40,6 +52,7 @@ export default function Todo({
 
     if (res.error) {
       console.error("Failed to toggle todo:", res.error);
+      setTodoList(await getTodos());
       return;
     }
 
@@ -56,6 +69,7 @@ export default function Todo({
 
     if (res.error) {
       console.error("Failed to delete todo:", res.error);
+      setTodoList(await getTodos());
       return;
     }
 
