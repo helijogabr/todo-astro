@@ -1,4 +1,5 @@
 import { actions } from "astro:actions";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import debounce from "lodash/debounce";
 import type {
@@ -25,25 +26,24 @@ export default function Todo({
 }) {
   const [newTodo, setNewTodo] = useState("");
 
-  const getTodos = useQuery(
-    {
-      queryKey: ["todos"],
-      queryFn: actionAdapter(actions.getTodos),
-      initialData: todos,
-      staleTime: 5 * 60 * 1000, // 5 min
-    },
-    queryClient,
-  );
-
   type TodoItem = {
     id: number;
     title: string;
     completed?: boolean;
     ghost?: boolean; // flag for any optimistic state
+    tempId?: number; // for optimistic additions
     [key: string]: unknown; // for optimistic flags
   };
 
-  const todoList: TodoItem[] = getTodos.data;
+  const getTodos = useQuery(
+    {
+      queryKey: ["todos"],
+      queryFn: actionAdapter(actions.getTodos),
+      initialData: todos as TodoItem[],
+      staleTime: 5 * 60 * 1000, // 5 min
+    },
+    queryClient,
+  );
 
   const addTodo = useMutation(
     {
@@ -53,19 +53,19 @@ export default function Todo({
         await queryClient.cancelQueries({ queryKey: ["todos"] });
 
         // optimistically add the new todo to the list with a temporary id
-        const tempId = Math.max(0, ...todoList.map((t) => t.id)) + 15;
+        const tempId = Math.max(0, ...getTodos.data.map((t) => t.id)) + 1;
 
         const newTodoItem = {
-          id: tempId,
+          tempId,
           title: input.title,
           completed: false,
           ghostAdd: true,
           ghost: true,
         };
 
-        queryClient.setQueryData(["todos"], [...todoList, newTodoItem]);
+        queryClient.setQueryData(["todos"], [...getTodos.data, newTodoItem]);
 
-        return { previousTodoList: todoList, optimisticItem: newTodoItem };
+        return { previousTodoList: getTodos.data, optimisticItem: newTodoItem };
       },
       onSuccess: (result, _, onMutateResult) => {
         const ghost = onMutateResult.optimisticItem;
@@ -74,10 +74,17 @@ export default function Todo({
           id: result.id,
           title: ghost.title,
           completed: ghost.completed,
+          ...(ghost.tempId === result.id
+            ? {}
+            : {
+                tempId: ghost.tempId,
+              }),
         };
 
         queryClient.setQueryData(["todos"], (old: TodoItem[]) =>
-          old ? old.map((t) => (t.id === ghost.id ? newItem : t)) : [newItem],
+          old
+            ? old.map((t) => (t.tempId === ghost.tempId ? newItem : t))
+            : [newItem],
         );
       },
       onError: (error, _, onMutateResult) => {
@@ -105,19 +112,19 @@ export default function Todo({
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.map((t) =>
+          getTodos.data.map((t) =>
             t.id === id ? { ...t, title, ghostMod: true, ghost: true } : t,
           ),
         );
 
-        return { previousList: todoList, modifiedId: id };
+        return { previousList: getTodos.data, modifiedId: id };
       },
       onSuccess: async (_1, _2, onMutateResult) => {
         const id = onMutateResult.modifiedId;
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.map((t) =>
+          getTodos.data.map((t) =>
             t.id === id
               ? {
                   title: t.title,
@@ -152,21 +159,21 @@ export default function Todo({
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.map((t) =>
+          getTodos.data.map((t) =>
             t.id === id
               ? { ...t, completed: !t.completed, ghostCheck: true, ghost: true }
               : t,
           ),
         );
 
-        return { previousList: todoList, toggledId: id };
+        return { previousList: getTodos.data, toggledId: id };
       },
       onSuccess: async (_1, _2, onMutateResult) => {
         const id = onMutateResult.toggledId;
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.map((t) =>
+          getTodos.data.map((t) =>
             t.id === id
               ? {
                   title: t.title,
@@ -200,19 +207,19 @@ export default function Todo({
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.map((t) =>
+          getTodos.data.map((t) =>
             t.id === id ? { ...t, ghostDel: true, ghost: true } : t,
           ),
         );
 
-        return { previousList: todoList, deletedId: id };
+        return { previousList: getTodos.data, deletedId: id };
       },
       onSuccess: () => {
         const id = deleteTodo.variables?.id;
 
         queryClient.setQueryData(
           ["todos"],
-          todoList.filter((t) => t.id !== id),
+          getTodos.data.filter((t) => t.id !== id),
         );
       },
       onError: (error, _, onMutateResult) => {
@@ -236,6 +243,16 @@ export default function Todo({
       modifyTodo.mutate({ id, title });
     }, 500),
   ).current;
+
+  const todoList: TodoItem[] = getTodos.data.sort((a, b) => {
+    if (a.completed === b.completed) {
+      return (a.tempId ?? a.id) - (b.tempId ?? b.id);
+    }
+
+    return a.completed ? 1 : -1;
+  });
+
+  const [animation] = useAutoAnimate();
 
   return (
     <div className="">
@@ -274,10 +291,11 @@ export default function Todo({
 
       <ul
         className={`flex flex-col gap-2 ${getTodos.isFetching ? "opacity-50" : ""}`}
+        ref={animation}
       >
         {todoList.map((item) => (
           <li
-            key={item.id}
+            key={item.tempId ?? item.id}
             className={`flex flex-row gap-1 ${item.ghostAdd ? "opacity-50" : ""} ${item.ghostDel ? "line-through opacity-30" : ""}`}
           >
             <input
