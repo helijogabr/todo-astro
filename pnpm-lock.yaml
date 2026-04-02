@@ -20,24 +20,12 @@ importers:
       '@astrojs/vercel':
         specifier: ^10.0.3
         version: 10.0.3(astro@6.1.2(@types/node@25.5.0)(@vercel/functions@3.4.3)(db0@0.3.4(@libsql/client@0.17.2)(drizzle-orm@0.42.0(@libsql/client@0.17.2)))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1))(react@19.2.4)(rollup@4.60.1)
-      '@libsql/client':
-        specifier: ^0.17.2
-        version: 0.17.2
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.2(vite@7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0))
-      '@types/bcrypt':
-        specifier: ^6.0.0
-        version: 6.0.0
-      '@types/react':
-        specifier: ^19.2.14
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.2.3
-        version: 19.2.3(@types/react@19.2.14)
-      '@vercel/functions':
-        specifier: ^3.4.3
-        version: 3.4.3
+      '@tanstack/react-query':
+        specifier: ^5.96.1
+        version: 5.96.1(react@19.2.4)
       astro:
         specifier: ^6.1.2
         version: 6.1.2(@types/node@25.5.0)(@vercel/functions@3.4.3)(db0@0.3.4(@libsql/client@0.17.2)(drizzle-orm@0.42.0(@libsql/client@0.17.2)))(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)
@@ -57,6 +45,15 @@ importers:
       '@biomejs/biome':
         specifier: 2.4.10
         version: 2.4.10
+      '@types/bcrypt':
+        specifier: ^6.0.0
+        version: 6.0.0
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       prettier:
         specifier: 3.8.1
         version: 3.8.1
@@ -936,6 +933,14 @@ packages:
     resolution: {integrity: sha512-mEiF5HO1QqCLXoNEfXVA1Tzo+cYsrqV7w9Juj2wdUFyW07JRenqMG225MvPwr3ZD9N1bFQj46X7r33iHxLUW0w==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
+
+  '@tanstack/query-core@5.96.1':
+    resolution: {integrity: sha512-u1yBgtavSy+N8wgtW3PiER6UpxcplMje65yXnnVgiHTqiMwLlxiw4WvQDrXyn+UD6lnn8kHaxmerJUzQcV/MMg==}
+
+  '@tanstack/react-query@5.96.1':
+    resolution: {integrity: sha512-2X7KYK5KKWUKGeWCVcqxXAkYefJtrKB7tSKWgeG++b0H6BRHxQaLSSi8AxcgjmUnnosHuh9WsFZqvE16P1WCzA==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -3247,6 +3252,13 @@ snapshots:
       '@tailwindcss/oxide': 4.2.2
       tailwindcss: 4.2.2
       vite: 7.3.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)
+
+  '@tanstack/query-core@5.96.1': {}
+
+  '@tanstack/react-query@5.96.1(react@19.2.4)':
+    dependencies:
+      '@tanstack/query-core': 5.96.1
+      react: 19.2.4
 
   '@types/babel__core@7.20.5':
     dependencies:

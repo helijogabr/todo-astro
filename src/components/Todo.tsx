@@ -1,15 +1,20 @@
 import { actions } from "astro:actions";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import type {
+  ErrorInferenceObject,
+  SafeResult,
+} from "node_modules/astro/dist/actions/runtime/types";
 import { useState } from "react";
+import { queryClient } from "@/query_client";
 
-async function getTodos() {
-  const res = await actions.getTodos();
+type ActionFunc<T, I> = (i: I) => Promise<SafeResult<ErrorInferenceObject, T>>;
 
-  if (res.error) {
-    console.error("Failed to fetch todos:", res.error);
-    return [];
-  }
-
-  return res.data;
+function actionAdapter<T, I>(action: ActionFunc<T, I>) {
+  return async (input: I, _context?: unknown) => {
+    const res = await action(input);
+    if (res.error) throw res.error;
+    return res.data;
+  };
 }
 
 export default function Todo({
@@ -17,98 +22,223 @@ export default function Todo({
 }: {
   todos: { id: number; title: string; completed: boolean }[];
 }) {
-  const [todoList, setTodoList] = useState(todos);
   const [newTodo, setNewTodo] = useState("");
 
-  async function addTodo(e: React.SubmitEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (newTodo.trim() === "") return;
+  const getTodos = useQuery(
+    {
+      queryKey: ["todos"],
+      queryFn: actionAdapter(actions.getTodos),
+      initialData: todos,
+      staleTime: 5 * 60 * 1000, // 5 min
+    },
+    queryClient,
+  );
 
-    const res = await actions.addTodo({
-      title: newTodo,
-    });
+  type TodoItem = {
+    id: number;
+    title: string;
+    completed?: boolean;
+    ghost?: boolean; // flag for any optimistic state
+    [key: string]: unknown; // for optimistic flags
+  };
 
-    if (res.error) {
-      console.error("Failed to add todo:", res.error);
-      setTodoList(await getTodos());
-      return;
-    }
+  const todoList: TodoItem[] = getTodos.data;
 
-    const newTodoItem = {
-      id: res.data.id,
-      title: newTodo,
-      completed: false,
-    };
+  const addTodo = useMutation(
+    {
+      mutationFn: (input: { title: string }) =>
+        actionAdapter(actions.addTodo)(input),
+      onMutate: async (input) => {
+        await queryClient.cancelQueries({ queryKey: ["todos"] });
 
-    setTodoList([...todoList, newTodoItem]);
-    setNewTodo("");
-  }
+        // optimistically add the new todo to the list with a temporary id
+        const tempId = Math.max(0, ...todoList.map((t) => t.id)) + 15;
 
-  async function toggleTodo(index: number) {
-    if (!todoList[index]) return;
-    const id = todoList[index].id;
+        const newTodoItem = {
+          id: tempId,
+          title: input.title,
+          completed: false,
+          ghostAdd: true,
+          ghost: true,
+        };
 
-    const res = await actions.toggleTodo({ id });
+        queryClient.setQueryData(["todos"], [...todoList, newTodoItem]);
 
-    if (res.error) {
-      console.error("Failed to toggle todo:", res.error);
-      setTodoList(await getTodos());
-      return;
-    }
+        return { previousTodoList: todoList, optimisticItem: newTodoItem };
+      },
+      onSuccess: (result, _, onMutateResult) => {
+        const ghost = onMutateResult.optimisticItem;
 
-    todoList[index].completed = !todoList[index].completed;
-    setTodoList([...todoList]);
-  }
+        const newItem = {
+          id: result.id,
+          title: ghost.title,
+          completed: ghost.completed,
+        };
 
-  async function deleteTodo(index: number) {
-    if (!todoList[index]) return;
+        queryClient.setQueryData(["todos"], (old: TodoItem[]) =>
+          old ? old.map((t) => (t.id === ghost.id ? newItem : t)) : [newItem],
+        );
+      },
+      onError: (error, _, onMutateResult) => {
+        console.error("Failed to add todo:", error);
+        const ghost = onMutateResult?.optimisticItem;
 
-    const id = todoList[index].id;
+        if (ghost) {
+          queryClient.setQueryData(["todos"], onMutateResult.previousTodoList);
+        }
 
-    const res = await actions.deleteTodo({ id });
+        queryClient.invalidateQueries({ queryKey: ["todos"] });
+      },
+    },
+    queryClient,
+  );
 
-    if (res.error) {
-      console.error("Failed to delete todo:", res.error);
-      setTodoList(await getTodos());
-      return;
-    }
+  const toggleTodo = useMutation(
+    {
+      mutationKey: ["toggleTodo"],
+      mutationFn: (input: { id: number }) =>
+        actionAdapter(actions.toggleTodo)(input),
+      onMutate: async (input) => {
+        await queryClient.cancelQueries({ queryKey: ["todos"] });
+        const id = input.id;
 
-    setTodoList(todoList.filter((_, i) => i !== index));
-  }
+        queryClient.setQueryData(
+          ["todos"],
+          todoList.map((t) =>
+            t.id === id
+              ? { ...t, completed: !t.completed, ghostCheck: true, ghost: true }
+              : t,
+          ),
+        );
+
+        return { previousList: todoList, toggledId: id };
+      },
+      onSuccess: async (_1, _2, onMutateResult) => {
+        const id = onMutateResult.toggledId;
+
+        queryClient.setQueryData(
+          ["todos"],
+          todoList.map((t) =>
+            t.id === id
+              ? {
+                  title: t.title,
+                  id: t.id,
+                  completed: t.completed,
+                }
+              : t,
+          ),
+        );
+      },
+      onError: (error, _, onMutateResult) => {
+        if (onMutateResult) {
+          queryClient.setQueryData(["todos"], onMutateResult.previousList);
+        }
+
+        console.error("Failed to toggle todo:", error);
+        queryClient.invalidateQueries({ queryKey: ["todos"] });
+      },
+    },
+    queryClient,
+  );
+
+  const deleteTodo = useMutation(
+    {
+      mutationFn: (input: { id: number }) =>
+        actionAdapter(actions.deleteTodo)(input),
+      onMutate: async (input) => {
+        await queryClient.cancelQueries({ queryKey: ["todos"] });
+
+        const id = input.id;
+
+        queryClient.setQueryData(
+          ["todos"],
+          todoList.map((t) =>
+            t.id === id ? { ...t, ghostDel: true, ghost: true } : t,
+          ),
+        );
+
+        return { previousList: todoList, deletedId: id };
+      },
+      onSuccess: () => {
+        const id = deleteTodo.variables?.id;
+
+        queryClient.setQueryData(
+          ["todos"],
+          todoList.filter((t) => t.id !== id),
+        );
+      },
+      onError: (error, _, onMutateResult) => {
+        console.error("Failed to delete todo:", error);
+
+        if (onMutateResult) {
+          queryClient.setQueryData(["todos"], onMutateResult.previousList);
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["todos"] });
+      },
+    },
+    queryClient,
+  );
+
+  const isSyncing =
+    getTodos.isFetching || addTodo.isPending || toggleTodo.isPending;
 
   return (
     <div className="">
-      <h1 className="text-2xl">Todo List</h1>
+      <div className="mb-2 flex flex-row justify-between">
+        <h1 className="text-2xl">Todo List</h1>
+        <button
+          type="button"
+          disabled={isSyncing}
+          className="cursor-pointer rounded border border-gray-300 bg-gray-100 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["todos"] })}
+        >
+          Refresh
+        </button>
+      </div>
 
-      <form onSubmit={addTodo}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          newTodo.trim() && addTodo.mutate({ title: newTodo.trim() });
+          setNewTodo("");
+        }}
+      >
         <input
           type="text"
           onChange={(e) => setNewTodo(e.target.value)}
           value={newTodo}
-          className="rounded border border-gray-300 mb-5"
+          className="mb-5 rounded border border-gray-300"
         />
-        <button type="submit" className="ml-1 rounded border border-gray-300">
+        <button
+          type="submit"
+          className="ml-1 cursor-pointer rounded border border-gray-300 px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Add a new Todo
         </button>
       </form>
 
-      <ul className="flex flex-col gap-2">
-        {todoList.map((item, index) => (
-          <li key={item.id} className="flex flex-row gap-1">
+      <ul
+        className={`flex flex-col gap-2 ${getTodos.isFetching ? "opacity-50" : ""}`}
+      >
+        {todoList.map((item) => (
+          <li
+            key={item.id}
+            className={`flex flex-row gap-1 ${item.ghostAdd ? "opacity-50" : ""} ${item.ghostDel ? "line-through opacity-30" : ""}`}
+          >
             <input
               type="checkbox"
               checked={item.completed}
-              onChange={() => toggleTodo(index)}
+              onChange={() => toggleTodo.mutate({ id: item.id })}
+              disabled={item.ghost}
+              className={`cursor-pointer rounded border-gray-300 disabled:cursor-not-allowed ${item.ghostCheck ? "opacity-50" : ""}`}
             />
 
             <button
               type="button"
-              disabled={!item.completed}
-              className={
-                "rounded border border-gray-300 px-1 " +
-                (item.completed ? "font-bold text-gray-700" : "text-gray-500")
-              }
-              onClick={() => deleteTodo(index)}
+              disabled={!item.completed || item.ghost}
+              className={`cursor-pointer rounded border border-gray-300 px-1 disabled:cursor-not-allowed ${item.completed ? "font-bold text-gray-700" : "text-gray-500"}`}
+              onClick={() => deleteTodo.mutate({ id: item.id })}
             >
               D
             </button>
