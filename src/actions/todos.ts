@@ -1,10 +1,18 @@
 import { ActionError, defineAction } from "astro:actions";
-import { and, db, eq, not, Todo } from "astro:db";
+import { and, asc, db, desc, eq, not, Todo } from "astro:db";
 import { z } from "astro/zod";
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export const getTodos = defineAction({
   handler: async (_, { session }) => {
     const user = await session?.get("userId");
+
+    if (import.meta.env.DEV) {
+      await sleep(500);
+    }
 
     if (!user) {
       throw new ActionError({
@@ -13,7 +21,16 @@ export const getTodos = defineAction({
       });
     }
 
-    const todos = await db.select().from(Todo).where(eq(Todo.user, user));
+    const todos = await db
+      .select({
+        id: Todo.id,
+        title: Todo.title,
+        completed: Todo.completed,
+      })
+      .from(Todo)
+      .where(eq(Todo.user, user))
+      .orderBy(asc(Todo.completed), desc(Todo.id));
+
     return todos;
   },
 });
@@ -24,6 +41,10 @@ export const addTodo = defineAction({
     completed: z.boolean().optional(),
   }),
   handler: async (input, { session }) => {
+    if (import.meta.env.DEV) {
+      await sleep(1000);
+    }
+
     const { title, completed } = input;
     const user = await session?.get("userId");
 
@@ -46,11 +67,16 @@ export const addTodo = defineAction({
     return { success: true, id: Number(result.lastInsertRowid) };
   },
 });
+
 export const toggleTodo = defineAction({
   input: z.object({
     id: z.number(),
   }),
   handler: async (input, { session }) => {
+    if (import.meta.env.DEV) {
+      await sleep(500);
+    }
+
     const { id } = input;
     const user = await session?.get("userId");
 
@@ -62,7 +88,9 @@ export const toggleTodo = defineAction({
     }
 
     const todo = await db
-      .select()
+      .select({
+        user: Todo.user,
+      })
       .from(Todo)
       .where(and(eq(Todo.id, id)))
       .then((rows) => rows[0]);
@@ -97,6 +125,10 @@ export const changeTodo = defineAction({
     completed: z.boolean().optional(),
   }),
   handler: async (input, { session }) => {
+    if (import.meta.env.DEV) {
+      await sleep(500);
+    }
+
     const { id, title, completed } = input;
     const user = await session?.get("userId");
 
@@ -108,7 +140,9 @@ export const changeTodo = defineAction({
     }
 
     const todo = await db
-      .select()
+      .select({
+        user: Todo.user,
+      })
       .from(Todo)
       .where(and(eq(Todo.id, id)))
       .then((rows) => rows[0]);
@@ -141,6 +175,10 @@ export const deleteTodo = defineAction({
     id: z.number(),
   }),
   handler: async (input, { session }) => {
+    if (import.meta.env.DEV) {
+      await sleep(500);
+    }
+
     const { id } = input;
     const user = await session?.get("userId");
 
@@ -152,7 +190,9 @@ export const deleteTodo = defineAction({
     }
 
     const todo = await db
-      .select()
+      .select({
+        user: Todo.user,
+      })
       .from(Todo)
       .where(and(eq(Todo.id, id)))
       .then((rows) => rows[0]);

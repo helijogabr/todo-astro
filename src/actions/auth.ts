@@ -63,7 +63,11 @@ export const loginForm = defineAction({
     }
 
     const user = await db
-      .select()
+      .select({
+        id: User.id,
+        name: User.name,
+        password: User.password
+      })
       .from(User)
       .where(eq(User.name, username))
       .limit(1)

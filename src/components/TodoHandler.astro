@@ -1,5 +1,5 @@
 ---
-import { db, eq, Todo } from "astro:db";
+import { actions } from "astro:actions";
 import TodoList from "@components/Todo.tsx";
 
 const user = await Astro.session?.get("userId");
@@ -14,7 +14,14 @@ if (!user) {
   }
 }
 
-const todos = await db.select().from(Todo).where(eq(Todo.user, user)).all();
+const { data, error } = await Astro.callAction(actions.getTodos, {});
+console.log(data)
 ---
 
-<TodoList todos={todos} client:load />
+{
+  data ? (
+    <TodoList todos={data} client:visible />
+  ) : (
+    <p>ERROR WHILE FECHING: {error}</p>
+  )
+}
